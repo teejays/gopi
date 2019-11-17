@@ -1,4 +1,4 @@
-package apitest
+package gopitest
 
 import (
 	"bytes"

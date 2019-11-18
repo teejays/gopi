@@ -1,4 +1,4 @@
-package gopi
+package mux
 
 import (
 	"fmt"
@@ -11,8 +11,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/teejays/clog"
 
-	"github.com/teejays/n-factor-vault/backend/library/json"
-	"github.com/teejays/n-factor-vault/backend/library/validator"
+	"github.com/teejays/gopi/json"
+	"github.com/teejays/gopi/validator"
 )
 
 // GetQueryParamInt extracts the param value with given name  out of the URL query

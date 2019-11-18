@@ -1,4 +1,4 @@
-package gopitest
+package muxtest
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/teejays/n-factor-vault/backend/library/go-api"
+	"github.com/teejays/gopi/mux"
 )
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
@@ -25,7 +25,7 @@ type TestSuite struct {
 	HandlerFunc           http.HandlerFunc
 	Handler               http.Handler
 	AuthBearerTokenFunc   func(*testing.T) string
-	AuthMiddlewareHandler api.MiddlewareFunc
+	AuthMiddlewareHandler mux.MiddlewareFunc
 	AfterTestFunc         func(*testing.T)
 	BeforeTestFunc        func(*testing.T)
 }
@@ -125,7 +125,7 @@ func (ts TestSuite) RunHandlerTest(t *testing.T, tt HandlerTest) {
 	}
 
 	if tt.WantErrMessage != "" || tt.WantErr {
-		var errH api.Error
+		var errH mux.Error
 		err = json.Unmarshal(body, &errH)
 		if err != nil {
 			t.Error(err)
@@ -200,7 +200,7 @@ type HandlerReqParams struct {
 	HandlerFunc     http.HandlerFunc
 	Handler         http.Handler
 	AuthBearerToken string
-	Middlewares     []api.MiddlewareFunc
+	Middlewares     []mux.MiddlewareFunc
 }
 
 // MakeHandlerRequest makes an request to the handler specified in p, using the content. It errors if there is an

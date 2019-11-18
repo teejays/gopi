@@ -1,4 +1,4 @@
-package gopi
+package mux
 
 import (
 	"testing"

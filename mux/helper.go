@@ -68,6 +68,19 @@ func GetMuxParamStr(r *http.Request, name string) (string, error) {
 	return valStr, nil
 }
 
+type StandardResponse struct {
+	Data  interface{}
+	Error error
+}
+
+func WriteStandardResponse(w http.ResponseWriter, v interface{}) {
+	var resp = StandardResponse{
+		Data:  v,
+		Error: nil,
+	}
+	writeResponse(w, http.StatusOK, resp)
+}
+
 // WriteResponse is a helper function to help write HTTP response
 func WriteResponse(w http.ResponseWriter, code int, v interface{}) {
 	writeResponse(w, code, v)
@@ -142,7 +155,7 @@ func UnmarshalJSONFromRequest(r *http.Request, v interface{}) error {
 		return ErrEmptyBody
 	}
 
-	clog.Debugf("api: Unmarshalling to JSON: body:\n%+v", string(body))
+	clog.Debugf("api: Unmarshaling to JSON: body:\n%+v", string(body))
 
 	// Unmarshal JSON into Go type
 	err = json.Unmarshal(body, &v)

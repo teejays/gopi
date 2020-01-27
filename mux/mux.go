@@ -62,6 +62,7 @@ func GetHandler(routes []Route, authMiddlewareFunc MiddlewareFunc, preMiddleware
 			r = a
 		}
 		// Register the route
+		clog.Infof("[Gopi] Registering endpoint: %s %s", route.GetPattern(), route.Method)
 		r.HandleFunc(route.GetPattern(), route.HandlerFunc).
 			Methods(route.Method)
 	}

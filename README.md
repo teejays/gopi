@@ -15,7 +15,7 @@ A Route is an entire specification required to setup a particular endpoint. It b
 
  e.g. 
  ```
-    routes := []Route{
+    routes := []gopi.Route{
         {
             Method:      http.MethodGet,
             Version:     1,
@@ -42,7 +42,7 @@ A server takes in a bunch of routes and optionally some middleware funcs, and se
 
 ```
 // params: address, port, authenticate middleware, pre-middlewares, post-middlewares
-err := api.StartServer("127.0.0.1", 8080, routes, nil, nil, nil)
+err := gopi.StartServer("127.0.0.1", 8080, routes, nil, nil, nil)
 if err != nil {
     log.Fatal(err)
 }

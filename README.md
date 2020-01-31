@@ -58,7 +58,7 @@ import (
     "log"
 	"net/http"
 
-	api "github.com/teejays/gopi/mux"
+	api "github.com/teejays/gopi"
 
 )
 

@@ -14,7 +14,7 @@ A Route is an entire specification required to setup a particular endpoint. It b
  - Authenticate (bool): Optional - if passed as true, the optional middleware setup for authentication will be called.
 
  e.g. 
- ```
+ ```golang
     routes := []gopi.Route{
         {
             Method:      http.MethodGet,
@@ -40,7 +40,7 @@ GOPI comes with some standard useful Middleware Funcs that are helpful in settin
 ### Server
 A server takes in a bunch of routes and optionally some middleware funcs, and sets up a HTTP server for them.
 
-```
+```golang
 // params: address, port, authenticate middleware, pre-middlewares, post-middlewares
 err := gopi.StartServer("127.0.0.1", 8080, routes, nil, nil, nil)
 if err != nil {
@@ -51,7 +51,7 @@ if err != nil {
 ## Example
 
 
-```
+```golang
 package main
 
 import (

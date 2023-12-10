@@ -1,4 +1,4 @@
-package mux
+package gopi
 
 import (
 	"fmt"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/teejays/clog"
+	"github.com/teejays/goku-util/errutil"
 
 	"github.com/teejays/gopi/json"
 	"github.com/teejays/gopi/validator"
@@ -69,14 +70,16 @@ func GetMuxParamStr(r *http.Request, name string) (string, error) {
 }
 
 type StandardResponse struct {
-	Data  interface{}
-	Error error
+	StatusCode int
+	Data       interface{}
+	Error      interface{}
 }
 
 func WriteStandardResponse(w http.ResponseWriter, v interface{}) {
 	var resp = StandardResponse{
-		Data:  v,
-		Error: nil,
+		StatusCode: http.StatusOK,
+		Data:       v,
+		Error:      nil,
 	}
 	writeResponse(w, http.StatusOK, resp)
 }
@@ -97,38 +100,60 @@ func writeResponse(w http.ResponseWriter, code int, v interface{}) {
 	// Json marshal the resp
 	data, err := json.Marshal(v)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, true, nil)
+		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	// Write the response
 	_, err = w.Write(data)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err, true, nil)
+		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 }
 
 // WriteError is a helper function to help write HTTP response
-func WriteError(w http.ResponseWriter, code int, err error, hide bool, overrideErr error) {
-	writeError(w, code, err, hide, overrideErr)
+func WriteError(w http.ResponseWriter, code int, err error) {
+	writeError(w, code, err)
 }
 
-func writeError(w http.ResponseWriter, code int, err error, hide bool, overrideErr error) {
-	errMessage := CleanErrMessage(err.Error())
-	clog.Error(errMessage)
+func writeError(w http.ResponseWriter, code int, err error) {
 
-	if hide {
-		errMessage = ErrMessageClean
-		if overrideErr != nil {
-			errMessage = CleanErrMessage(overrideErr.Error())
+	var errMessage string
+
+	// For Internal errors passed, use a generic message
+	if code == http.StatusInternalServerError {
+		errMessage = ErrMessageGeneric
+	}
+
+	clog.Error(err.Error())
+
+	// If it a goku error?
+	if gErr, ok := errutil.AsGokuError(err); ok {
+		errMessage = gErr.GetExternalMsg()
+		if code < 1 {
+			code = gErr.GetHTTPStatus()
 		}
 	}
 
-	errE := NewError(code, errMessage)
+	if errMessage == "" {
+		errMessage = err.Error()
+
+	}
+
+	// Still no code? Use InternalServerError
+	if code < 1 {
+		code = http.StatusInternalServerError
+	}
+
+	resp := StandardResponse{
+		StatusCode: code,
+		Data:       nil,
+		Error:      errMessage,
+	}
 
 	w.WriteHeader(code)
-	data, err := json.Marshal(errE)
+	data, err := json.Marshal(resp)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to json.Unmarshal an error for http response: %v", err))
 	}

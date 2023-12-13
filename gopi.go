@@ -43,8 +43,8 @@ func GetHandler(routes []Route, authMiddlewareFunc MiddlewareFunc, preMiddleware
 	originsOk := handlers.AllowedOrigins([]string{"*"})
 	credsOk := handlers.AllowCredentials()
 	headersOk := handlers.AllowedHeaders([]string{"Content-Type", "authorization"})
-	//methodsOk := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS"})
-	corsEnabler := handlers.CORS(originsOk, credsOk, headersOk)
+	methodsOk := handlers.AllowedMethods([]string{http.MethodHead, http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodPatch})
+	corsEnabler := handlers.CORS(originsOk, credsOk, headersOk, methodsOk)
 
 	// Register routes to the handler
 	// Set up pre handler middlewares
@@ -81,7 +81,6 @@ func GetHandler(routes []Route, authMiddlewareFunc MiddlewareFunc, preMiddleware
 		m.Use(mux.MiddlewareFunc(mw))
 	}
 
-	clog.Warn("New version being used")
 	mc := corsEnabler(m)
 
 	return mc, nil

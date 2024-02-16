@@ -1,6 +1,7 @@
 package gopi
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -9,21 +10,23 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	"github.com/teejays/clog"
 	"github.com/teejays/goku-util/errutil"
+	"github.com/teejays/goku-util/httputil"
+	"github.com/teejays/goku-util/log"
+	"github.com/teejays/goku-util/panics"
 
 	"github.com/teejays/gopi/json"
 	"github.com/teejays/gopi/validator"
 )
 
-// GetQueryParamInt extracts the param value with given name  out of the URL query
+// GetQueryParamInt extracts the param value with given name out of the URL query
 func GetQueryParamInt(r *http.Request, name string, defaultVal int) (int, error) {
 	err := r.ParseForm()
 	if err != nil {
 		return defaultVal, err
 	}
 	values, exist := r.Form[name]
-	clog.Debugf("URL values for %s: %+v", name, values)
+	log.DebugNoCtx("URL values", "param", name, "value", values)
 	if !exist {
 		return defaultVal, nil
 	}
@@ -42,7 +45,8 @@ func GetQueryParamInt(r *http.Request, name string, defaultVal int) (int, error)
 func GetMuxParamInt(r *http.Request, name string) (int64, error) {
 
 	var vars = mux.Vars(r)
-	clog.Debugf("MUX vars are: %+v", vars)
+
+	log.DebugNoCtx("MUX vars", "value", vars)
 	valStr := vars[name]
 	if strings.TrimSpace(valStr) == "" {
 		return -1, fmt.Errorf("could not find var %s in the route", name)
@@ -60,7 +64,7 @@ func GetMuxParamInt(r *http.Request, name string) (int64, error) {
 func GetMuxParamStr(r *http.Request, name string) (string, error) {
 
 	var vars = mux.Vars(r)
-	clog.Debugf("MUX vars are: %+v", vars)
+	log.DebugNoCtx("MUX vars", "value", vars)
 	valStr := vars[name]
 	if strings.TrimSpace(valStr) == "" {
 		return "", fmt.Errorf("var '%s' is not in the route", name)
@@ -91,7 +95,7 @@ func WriteResponse(w http.ResponseWriter, code int, v interface{}) {
 
 func writeResponse(w http.ResponseWriter, code int, v interface{}) {
 	w.WriteHeader(code)
-	clog.Debugf("api: writeResponse: content kind: %v; content:\n%+v", reflect.ValueOf(v).Kind(), v)
+	log.DebugNoCtx("api: writeResponse", "kind", reflect.ValueOf(v).Kind(), "content", v)
 
 	if v == nil {
 		return
@@ -126,7 +130,7 @@ func writeError(w http.ResponseWriter, code int, err error) {
 		errMessage = ErrMessageGeneric
 	}
 
-	clog.Error(err.Error())
+	log.ErrorNoCtx("Writing error to http response", "error", err)
 
 	// If it a goku error?
 	if gErr, ok := errutil.AsGokuError(err); ok {
@@ -180,13 +184,12 @@ func UnmarshalJSONFromRequest(r *http.Request, v interface{}) error {
 		return ErrEmptyBody
 	}
 
-	clog.Debugf("api: Unmarshaling to JSON: body:\n%+v", string(body))
+	log.DebugNoCtx("api: Unmarshaling to JSON", "body", string(body))
 
 	// Unmarshal JSON into Go type
 	err = json.Unmarshal(body, &v)
 	if err != nil {
-		// api.WriteError(w, http.StatusBadRequest, err, true, api.ErrInvalidJSON)
-		clog.Errorf("api: Error unmarshaling JSON: %v", err)
+		log.ErrorNoCtx("api: Unmarshaling to JSON", "error", err)
 		return ErrInvalidJSON
 	}
 
@@ -196,4 +199,83 @@ func UnmarshalJSONFromRequest(r *http.Request, v interface{}) error {
 	}
 
 	return nil
+}
+
+func HandlerWrapper[ReqT any, RespT any](httpMethod string, fn func(context.Context, ReqT) (RespT, error)) http.HandlerFunc {
+
+	switch httpMethod {
+	case http.MethodGet:
+		return GetGenericGetHandler(fn)
+	case http.MethodPost, http.MethodPut, http.MethodPatch:
+		return GetGenericPostPutPatchHandler(fn)
+	default:
+		// Todo: Implement other method types like DELETE?
+	}
+
+	panics.P("HTTP Method type [%s] not implemented by routes.HandlerWrapper().", httpMethod)
+	return nil
+}
+
+func GetGenericGetHandler[ReqT, RespT any](fn func(context.Context, ReqT) (RespT, error)) http.HandlerFunc {
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		log.Debug(ctx, "[HTTP Handler] Starting...")
+
+		// Get the req data from URL
+		reqParam, ok := r.URL.Query()["req"]
+		if !ok || len(reqParam) < 1 {
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("URL param 'req' is required"))
+			return
+		}
+		if len(reqParam) > 1 {
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("multiple URL params with name 'req' found"))
+			return
+		}
+
+		var req ReqT
+		err := json.Unmarshal([]byte(reqParam[0]), &req)
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		// Call the method
+		resp, err := fn(ctx, req)
+		if err != nil {
+			WriteError(w, 0, err)
+			return
+		}
+
+		WriteStandardResponse(w, resp)
+		return
+	}
+}
+
+func GetGenericPostPutPatchHandler[ReqT, RespT any](fn func(context.Context, ReqT) (RespT, error)) http.HandlerFunc {
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		log.Debug(ctx, "[HTTP Handler] Starting...")
+
+		// Get the req from HTTP body
+		var req ReqT
+		err := httputil.UnmarshalJSONFromRequest(r, &req)
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		// Call the method
+		resp, err := fn(r.Context(), req)
+		if err != nil {
+			WriteError(w, 0, err)
+			return
+		}
+
+		WriteStandardResponse(w, resp)
+
+	}
 }

@@ -1,18 +1,28 @@
 package gopi
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"github.com/teejays/clog"
+	"github.com/teejays/goku-util/log"
 )
 
-// StartServer initializes and runs the HTTP server
-func StartServer(addr string, port int, routes []Route, authMiddlewareFunc MiddlewareFunc, preMiddlewareFuncs, postMiddlewareFuncs []MiddlewareFunc) error {
+// Route represents a standard route object
+type Route struct {
+	Method       string
+	Version      int
+	Path         string
+	HandlerFunc  http.HandlerFunc
+	Authenticate bool
+}
 
-	m, err := GetHandler(routes, authMiddlewareFunc, preMiddlewareFuncs, postMiddlewareFuncs)
+// StartServer initializes and runs the HTTP server
+func StartServer(ctx context.Context, addr string, port int, routes []Route, authMiddlewareFunc MiddlewareFunc, preMiddlewareFuncs, postMiddlewareFuncs []MiddlewareFunc) error {
+
+	m, err := GetHandler(ctx, routes, authMiddlewareFunc, preMiddlewareFuncs, postMiddlewareFuncs)
 	if err != nil {
 		return fmt.Errorf("could not setup the http handler: %c", err)
 	}
@@ -20,7 +30,7 @@ func StartServer(addr string, port int, routes []Route, authMiddlewareFunc Middl
 	http.Handle("/", m)
 
 	// Start the server
-	clog.Infof("HTTP Server listening on: %s:%d", addr, port)
+	log.Info(ctx, "[Gopi] HTTP Server listening", "address", addr, "port", port)
 
 	err = http.ListenAndServe(fmt.Sprintf("%s:%d", addr, port), nil)
 	if err != nil {
@@ -32,10 +42,10 @@ func StartServer(addr string, port int, routes []Route, authMiddlewareFunc Middl
 }
 
 // GetHandler constructs a HTTP handler with all the routes and middleware funcs configured
-func GetHandler(routes []Route, authMiddlewareFunc MiddlewareFunc, preMiddlewareFuncs, postMiddlewareFuncs []MiddlewareFunc) (http.Handler, error) {
+func GetHandler(ctx context.Context, routes []Route, authMiddlewareFunc MiddlewareFunc, preMiddlewareFuncs, postMiddlewareFuncs []MiddlewareFunc) (http.Handler, error) {
 
 	// Initiate a router
-	m := mux.NewRouter()
+	m := mux.NewRouter().PathPrefix("api").Subrouter()
 
 	// Enable CORS
 	// TODO: Have tighter control over CORS policy, but okay for
@@ -66,13 +76,14 @@ func GetHandler(routes []Route, authMiddlewareFunc MiddlewareFunc, preMiddleware
 		if route.Authenticate {
 			if a == nil {
 				// We marked a route as requiring authentication but provided no auth middleware func :(
-				return nil, fmt.Errorf("route for %s is has authentication flag set but no authentication middleware has been provided", route.Path)
+				return nil, fmt.Errorf("route for %s has authentication flag set but no authentication middleware has been provided", route.Path)
 			}
 			r = a
 		}
 		// Register the route
-		clog.Infof("[Gopi] Registering endpoint: %s %s", route.GetPattern(), route.Method)
-		r.HandleFunc(route.GetPattern(), route.HandlerFunc).
+		log.Info(ctx, "[Gopi] Registering endpoint", "path", GetRoutePattern(route), "method", route.Method)
+
+		r.HandleFunc(GetRoutePattern(route), route.HandlerFunc).
 			Methods(route.Method)
 	}
 
@@ -93,7 +104,7 @@ type MiddlewareFunc mux.MiddlewareFunc
 func LoggerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Log the request
-		clog.Debugf("Server: HTTP request received for %s %s", r.Method, r.URL.Path)
+		log.DebugNoCtx("[Gopi] HTTP request received", "http_method", r.Method, "path", r.URL.Path)
 		// Call the next handler
 		next.ServeHTTP(w, r)
 	})
@@ -107,4 +118,9 @@ func SetJSONHeaderMiddleware(next http.Handler) http.Handler {
 		// Call the next handler
 		next.ServeHTTP(w, r)
 	})
+}
+
+// returns the url match pattern for the route
+func GetRoutePattern(r Route) string {
+	return fmt.Sprintf("/v%d/%s", r.Version, r.Path)
 }

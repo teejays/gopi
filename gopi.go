@@ -19,22 +19,37 @@ type Route struct {
 	Authenticate bool
 }
 
-// StartServer initializes and runs the HTTP server
-func StartServer(ctx context.Context, addr string, port int, routes []Route, authMiddlewareFunc MiddlewareFunc, preMiddlewareFuncs, postMiddlewareFuncs []MiddlewareFunc) error {
+type MiddlewareFuncs struct {
+	AuthMiddleware  mux.MiddlewareFunc
+	PreMiddlewares  []mux.MiddlewareFunc
+	PostMiddlewares []mux.MiddlewareFunc
+}
 
-	m, err := GetHandler(ctx, routes, authMiddlewareFunc, preMiddlewareFuncs, postMiddlewareFuncs)
+type Server struct {
+	rootHandler http.Handler
+}
+
+func NewServer(ctx context.Context, routes []Route, middlewares MiddlewareFuncs) (Server, error) {
+	m, err := GetHandler(ctx, routes, middlewares)
 	if err != nil {
-		return fmt.Errorf("could not setup the http handler: %c", err)
+		return Server{}, fmt.Errorf("could not setup the http handler: %w", err)
 	}
 
-	http.Handle("/", m)
+	return Server{rootHandler: m}, nil
+
+}
+
+// StartServer initializes and runs the HTTP server. This is a blocking function.
+func (s *Server) StartServer(ctx context.Context, addr string, port int) error {
+
+	http.Handle("/", s.rootHandler)
 
 	// Start the server
 	log.Info(ctx, "[Gopi] HTTP Server listening", "address", addr, "port", port)
 
-	err = http.ListenAndServe(fmt.Sprintf("%s:%d", addr, port), nil)
+	err := http.ListenAndServe(fmt.Sprintf("%s:%d", addr, port), nil)
 	if err != nil {
-		return fmt.Errorf("HTTP Server failed to start or continue running: %v", err)
+		return fmt.Errorf("HTTP Server failed to start or continue running: %w", err)
 	}
 
 	return nil
@@ -42,7 +57,7 @@ func StartServer(ctx context.Context, addr string, port int, routes []Route, aut
 }
 
 // GetHandler constructs a HTTP handler with all the routes and middleware funcs configured
-func GetHandler(ctx context.Context, routes []Route, authMiddlewareFunc MiddlewareFunc, preMiddlewareFuncs, postMiddlewareFuncs []MiddlewareFunc) (http.Handler, error) {
+func GetHandler(ctx context.Context, routes []Route, middlewares MiddlewareFuncs) (http.Handler, error) {
 
 	// Initiate a router
 	m := mux.NewRouter().PathPrefix("api").Subrouter()
@@ -58,17 +73,29 @@ func GetHandler(ctx context.Context, routes []Route, authMiddlewareFunc Middlewa
 
 	// Register routes to the handler
 	// Set up pre handler middlewares
-	for _, mw := range preMiddlewareFuncs {
+	for _, mw := range middlewares.PreMiddlewares {
 		m.Use(mux.MiddlewareFunc(mw))
 	}
 
 	// Create an authenticated subrouter
 	var a *mux.Router
-	if authMiddlewareFunc != nil {
+	if middlewares.AuthMiddleware != nil {
 		a = m.PathPrefix("").Subrouter()
-		a.Use(mux.MiddlewareFunc(authMiddlewareFunc))
+		a.Use(mux.MiddlewareFunc(middlewares.AuthMiddleware))
 	}
 
+	// Validate Routes
+	if len(routes) == 0 {
+		return nil, fmt.Errorf("no routes provided")
+	}
+	var routesLookup = map[string]bool{}
+	for _, r := range routes {
+		key := r.Method + " " + r.Path
+		if routesLookup[key] {
+			return nil, fmt.Errorf("multiple routes provided for [%s]", key)
+		}
+		routesLookup[key] = true
+	}
 	// Range over routes and register them
 	for _, route := range routes {
 		// If the route is supposed to be authenticated, use auth mux
@@ -83,12 +110,22 @@ func GetHandler(ctx context.Context, routes []Route, authMiddlewareFunc Middlewa
 		// Register the route
 		log.Info(ctx, "[Gopi] Registering endpoint", "path", GetRoutePattern(route), "method", route.Method)
 
+		if route.Method == "" {
+			return nil, fmt.Errorf("route [%s] has no http method", route.Path)
+		}
+		if route.Path == "" {
+			return nil, fmt.Errorf("route [%s] has no path", route.Path)
+		}
+		if route.HandlerFunc == nil {
+			return nil, fmt.Errorf("route [%s] has no HandlerFunc", route.Path)
+		}
+
 		r.HandleFunc(GetRoutePattern(route), route.HandlerFunc).
 			Methods(route.Method)
 	}
 
 	// Set up pre handler middlewares
-	for _, mw := range postMiddlewareFuncs {
+	for _, mw := range middlewares.PostMiddlewares {
 		m.Use(mux.MiddlewareFunc(mw))
 	}
 
@@ -96,9 +133,6 @@ func GetHandler(ctx context.Context, routes []Route, authMiddlewareFunc Middlewa
 
 	return mc, nil
 }
-
-// MiddlewareFunc can be inserted in a server for processing
-type MiddlewareFunc mux.MiddlewareFunc
 
 // LoggerMiddleware is a http.Handler middleware function that logs any request received
 func LoggerMiddleware(next http.Handler) http.Handler {
@@ -122,5 +156,9 @@ func SetJSONHeaderMiddleware(next http.Handler) http.Handler {
 
 // returns the url match pattern for the route
 func GetRoutePattern(r Route) string {
+	// Strip out any `/` if provided by upstream
+	if len(r.Path) > 0 && r.Path[0] == '/' {
+		r.Path = r.Path[1:]
+	}
 	return fmt.Sprintf("/v%d/%s", r.Version, r.Path)
 }

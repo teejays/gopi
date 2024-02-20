@@ -8,6 +8,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/stretchr/testify v1.8.4
 	github.com/teejays/goku-util v0.0.0-20240216211910-e15ce39e6dfb
+	golang.org/x/net v0.5.0
 	gopkg.in/go-playground/validator.v9 v9.31.0
 )
 

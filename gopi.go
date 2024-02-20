@@ -60,7 +60,7 @@ func (s *Server) StartServer(ctx context.Context, addr string, port int) error {
 func GetHandler(ctx context.Context, routes []Route, middlewares MiddlewareFuncs) (http.Handler, error) {
 
 	// Initiate a router
-	m := mux.NewRouter().PathPrefix("api").Subrouter()
+	m := mux.NewRouter().PathPrefix("/api").Subrouter()
 
 	// Enable CORS
 	// TODO: Have tighter control over CORS policy, but okay for
@@ -120,8 +120,14 @@ func GetHandler(ctx context.Context, routes []Route, middlewares MiddlewareFuncs
 			return nil, fmt.Errorf("route [%s] has no HandlerFunc", route.Path)
 		}
 
-		r.HandleFunc(GetRoutePattern(route), route.HandlerFunc).
+		mRoute := r.HandleFunc(GetRoutePattern(route), route.HandlerFunc).
 			Methods(route.Method)
+
+		fullPath, err := mRoute.GetPathTemplate()
+		if err != nil {
+			return nil, err
+		}
+		log.Info(ctx, "[Gopi] Registered Endpoint", "method", route.Method, "path", fullPath)
 	}
 
 	// Set up pre handler middlewares

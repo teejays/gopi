@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/stretchr/testify v1.8.4
 	github.com/teejays/goku-util v0.0.0-20240216211910-e15ce39e6dfb
-	golang.org/x/net v0.5.0
+	golang.org/x/net v0.21.0
 	gopkg.in/go-playground/validator.v9 v9.31.0
 )
 
@@ -21,9 +21,9 @@ require (
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/teejays/clog v0.0.0-20181107215916-71000d459f17 // indirect
-	golang.org/x/crypto v0.5.0 // indirect
-	golang.org/x/sys v0.4.0 // indirect
-	golang.org/x/text v0.6.0 // indirect
+	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
 	gopkg.in/go-playground/assert.v1 v1.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
